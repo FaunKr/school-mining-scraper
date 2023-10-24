@@ -158,8 +158,7 @@ fn main() {
             return;
         }
     };
-
-    println!("{:#?}",config);
+ 
     // Wenn STATE_CHECK_URL gesetzt ist wird der Status des Programms auf dem Hauptserver abgefragt
     if let Some(status_file_check) = &config.state_file_check {
         match reqwest::blocking::get(status_file_check) {
