@@ -46,6 +46,8 @@ Folgenden Umgebungsvariablen können gesetzt werden:
 | `STORAGE_PATH`    | Pfad zum Speichern der Daten                                                |
 | `STATE_PATH`      | Pfad zum Speichern des Zustands (Für Failover Betrieb)                                            |
 | `STATE_CHECK_URL` | Url zum Überprüfen des Zustands falls ein Failover Server eingesetzt wird  (Für Failover Betrieb) |
+| `RUST_LOG` | Log Level (`trace`,`debug`,`info`,`warn`,`error`) |
+| `LOG_PATH` | Path to logging directory |
 
 
 ### Beispiel .env Datei

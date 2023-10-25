@@ -1,11 +1,13 @@
 use chrono::{DateTime, Utc};
 use data::{ExportFile, Snapshot};
 use dotenvy;
+use flexi_logger::{Logger, LoggerHandle, FileSpec, FlexiLoggerError};
 use serde::{Deserialize, Serialize};
 use std::env;
 use untis::Date; 
 use sha2::{Digest, Sha256};
 use crate::data::Lesson;
+use log::{error,  info,  trace};
 
 mod data;
 
@@ -32,12 +34,17 @@ struct Config {
     state_file_check: Option<String>,
 }
 
-/// Lädt die Konfiguration aus der .env Datei
-fn load_config() -> Result<Config> {
+
+/// Lädt die .env Datei und überschreibt die bereits gesetzten Variablen
+fn load_dotenv(){
     // Lädt die .env Datei, wenn sie nicht gefunden wird wird eine Fehlermeldung ausgegeben.
     if let Err(_) = dotenvy::dotenv_override() {
         println!("Failed to load \".env\" file.");
     }
+}
+
+/// Lädt die Konfiguration aus der .env Datei
+fn load_config() -> Result<Config> {
 
     // Lädt die Variablen aus der .env Datei, wenn eine Variable nicht gefunden wird, wird ein Fehler zurückgegeben.
     Ok(Config {
@@ -70,6 +77,8 @@ fn create_snapshot(client: &mut untis::Client, secret: &str) -> Result<Snapshot>
 
     // Füge die Stundenpläne der Klassen zum Snapshot hinzu
     classes.iter().for_each(|class| {
+
+        trace!("Lade Stundenplan für Klasse: {}", class.name);
         // Lädt den Stundenplan der Klasse
         match client.timetable_between(
             &class.id,
@@ -105,7 +114,7 @@ fn create_snapshot(client: &mut untis::Client, secret: &str) -> Result<Snapshot>
                 })
             }
             Err(e) => {
-                println!("Error: {:#?}", e)
+                error!("Error: {:#?}", e)
             }
         }
     });
@@ -148,13 +157,37 @@ fn update_state(path: &str, state: State) -> Result<()> {
     Ok(())
 }
 
+/// Erstellt einen Logger mit den Log Leveln die in der .env Datei gesetzt sind.
+/// Der Logger loggt in die Konsole und in eine Log Datei. Die Log Datei wird jeden Tag rotiert.
+/// 
+/// # Returns
+/// * `LoggerHandle` - LoggerHandle mit dem der Logger gesteuert werden kann
+fn init_logger() -> std::result::Result<LoggerHandle,FlexiLoggerError>{ 
+    Logger::try_with_env_or_str("warn")? 
+    .log_to_file(FileSpec::default().directory(env::var("LOG_PATH").unwrap_or("log/".to_string()))) // Logt in eine Datei im Ordner "log" oder in den Ordner der in der .env Datei unter "LOG_PATH" gesetzt ist
+    .rotate(flexi_logger::Criterion::Age(flexi_logger::Age::Day), flexi_logger::Naming::Numbers, flexi_logger::Cleanup::KeepLogFiles(10)) // Rotiert die Log Datei
+    .duplicate_to_stderr(flexi_logger::Duplicate::All) // Logt zusätzlich in die Konsole
+    .start()
+}
+
 fn main() {
+
+    load_dotenv();
+    let _logger = match init_logger(){
+        Ok(logger) => logger,
+        Err(e) => {
+            let error_msg = format!("Logger konnte nicht erstellt werden. {:#?}",e);
+            println!("{}", error_msg); 
+            return;
+        }
+    };
+    info!("Logger wurde erstellt.");
     // Lädt die Konfiguration aus der .env Datei, wenn eine Variable nicht gefunden wird, wird das Programm beendet.
     let config = match load_config() {
         Ok(config) => config,
         Err(_) => {
             let error_msg = "Laden der Konfiguration fehlgeschlagen.";
-            println!("{}", error_msg);
+            error!("{}", error_msg); 
             return;
         }
     };
@@ -173,19 +206,19 @@ fn main() {
                         match state.state {
                             // Wenn das Programm bereits läuft wird eine Meldung ausgegeben und das Programm beendet
                             State::STARTED => {
-                                println!("Das Programm läuft bereits.");
+                                info!("Das Programm läuft auf den Hauptserver bereits.");
                                 return;
                             }
                             // Wenn das Programm erfolgreich ausgeführt wurde wird eine Meldung ausgegeben und das Programm beendet
                             State::SUCCESS => {
-                                println!("Das Programm wurde erfolgreich ausgeführt.");
+                                info!("Das Programm wurde auf den Hauptserver erfolgreich ausgeführt.");
                                 return;
                             }
 
                             // Wenn das Programm mit einem Fehler beendet wurde wird eine Meldung ausgegeben und das Programm wird fortgesetzt
                             State::ERROR(error_msg) => {
-                                println!("Hauptserver hat den Fehler: \"{}\"", error_msg);
-                                println!("Daten werden abgerufen.")
+                                error!("Hauptserver hat den Fehler: \"{}\"", error_msg);
+                                info!("Daten werden Lokal abgerufen.")
                             }
                         }
                     }
@@ -195,8 +228,8 @@ fn main() {
             // Wenn der Status nicht erfolgreich abgerufen werden konnte wird eine Meldung ausgegeben und das Programm wird fortgesetzt
             Err(e) => {
                 let error_msg = format!("Fehler beim abrufen des Status: \"{:#?}\"", e);
-                println!("{}", error_msg);
-                println!("Daten werden abgerufen.");
+                error!("{}", error_msg);
+                info!("Daten werden abgerufen.");
             }
         }
     }
@@ -205,7 +238,7 @@ fn main() {
     if let Some(path) = &config.state_file_path {
         if let Err(e) = update_state(path, State::STARTED) {
             let error_msg = format!("Fehler beim setzen des Status. {:#?}", e);
-            println!("{}", error_msg);
+            error!("{}", error_msg);
         }
     }
 
@@ -219,13 +252,13 @@ fn main() {
         Ok(client) => client,
         Err(e) => {
             let error_msg = format!("Login fehlgeschlagen. {:#?}", e);
-            println!("{}", error_msg);
+            error!("{}", error_msg);
 
             // Wenn STATE_PATH gesetzt ist wird der Status des Programms auf ERROR gesetzt
             if let Some(path) = &config.state_file_path {
                 if let Err(e) = update_state(path, State::ERROR(error_msg)) {
                     let error_msg = format!("Fehler beim setzen des Status. {:#?}", e);
-                    println!("{}", error_msg);
+                    error!("{}", error_msg);
                 }
             }
             return;
@@ -237,13 +270,13 @@ fn main() {
         Ok(export_file) => export_file,
         Err(e) => {
             let error_msg = format!("Fehler beim Laden der ExportFile. {:#?}", e);
-            println!("{}", error_msg);
+            error!("{}", error_msg);
 
             // Wenn STATE_PATH gesetzt ist wird der Status des Programms auf ERROR gesetzt
             if let Some(path) = &config.state_file_path {
                 if let Err(e) = update_state(path, State::ERROR(error_msg)) {
                     let error_msg = format!("Fehler beim setzen des Status. {:#?}", e);
-                    println!("{}", error_msg);
+                    error!("{}", error_msg);
                 }
             }
             return;
@@ -255,13 +288,13 @@ fn main() {
             Ok(snapshot) => snapshot,
             Err(e) => {
                 let error_msg = format!("Fehler beim erstellen des Snapshots. {:#?}", e);
-                println!("{}", error_msg);
+                error!("{}", error_msg);
 
                 // Wenn STATE_PATH gesetzt ist wird der Status des Programms auf ERROR gesetzt
                 if let Some(path) = &config.state_file_path {
                     if let Err(e) = update_state(path, State::ERROR(error_msg)) {
                         let error_msg = format!("Fehler beim setzen des Status. {:#?}", e);
-                        println!("{}", error_msg);
+                        error!("{}", error_msg);
                     }
                 }
                 return;
@@ -275,23 +308,23 @@ fn main() {
     // Speichert die ExportDatei
     if let Err(e) = export_file.save(&config.path) {
         let error_msg = format!("Fehler beim Speichern der ExportFile. {:#?}", e);
-        println!("{}", error_msg);
+        error!("{}", error_msg);
 
         // Wenn STATE_PATH gesetzt ist wird der Status des Programms auf ERROR gesetzt
         if let Some(path) = &config.state_file_path {
             if let Err(e) = update_state(path, State::ERROR(error_msg)) {
                 let error_msg = format!("Fehler beim setzen des Status. {:#?}", e);
-                println!("{}", error_msg);
+                error!("{}", error_msg);
             }
         }
         return;
-    }
-
+    } 
     // Wenn STATE_PATH gesetzt ist wird der Status des Programms auf SUCCESS gesetzt
     if let Some(path) = &config.state_file_path {
         if let Err(e) = update_state(path, State::SUCCESS) {
             let error_msg = format!("Fehler beim setzen des Status. {:#?}", e);
-            println!("{}", error_msg);
+            error!("{}", error_msg);
         }
     }
+    info!("Daten wurden erfolgreich abgerufen.")
 }

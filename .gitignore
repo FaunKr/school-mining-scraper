@@ -2,3 +2,5 @@
 /data
 .env
 /.vscode
+state.json
+/log 
