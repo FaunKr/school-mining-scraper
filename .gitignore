@@ -1,6 +1,6 @@
 /target
 /data
 .env
-/.vscode
-state.json
+/.vscode 
 /log 
+state.json
