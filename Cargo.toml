@@ -10,8 +10,7 @@ license = "MIT"
 [dependencies]
 untis = {git="https://github.com/luleyleo/untis-rs.git"}
 chrono = {version="0.4",features=["rkyv","serde"]}
-dotenvy = "0.15.7"
-postgres = "0.19.7"
+dotenvy = "0.15.7" 
 rkyv = { version = "0.7.42", features = ["archive_le"] }
 sha2 = "0.10.8"
 anyhow = "1.0.75"
