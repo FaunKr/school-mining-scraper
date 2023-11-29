@@ -20,11 +20,11 @@ Die Gruppe `admin` sollte nicht existieren, da diese angelegt wird und der aktue
 2. Just installieren: `cargo install just`
 3. Repository klonen: `git clone https://github.com/FaunKr/school-mining-scraper.git`
 4. System vorbereiten: `just prepare`
-5. Scraper ausführen: `just install`
+5. Scraper installieren: `just install`
 
 #### Hinweise
 
-`just prepare` muss nur einmal ausgeführt werde und legt das Verzeichnis `/srv` an, erstellt die Gruppe `admin`, fügt den aktuellen Benutzer dieser Gruppe hinzu und gibt der Gruppe die Rechte für das Verzeichnis `/srv`.
+`just prepare` muss nur einmal ausgeführt werden und legt das Verzeichnis `/srv` an, erstellt die Gruppe `admin`, fügt den aktuellen Benutzer dieser Gruppe hinzu und gibt der Gruppe die Rechte für das Verzeichnis `/srv`.
 
 `just install` erstellt das Verzeichnis `/srv/school-mining` und installiert den Scraper in dieses Verzeichnis. Für die Ausführung des Scrapers müssen allerdings noch die Umgebungsvariablen gesetzt werden. Dies kann über die Shell oder eine .env Datei geschehen.
 
